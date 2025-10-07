@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football Passing Plays Visualizer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #1a3d1a;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-top: 24px;
+      margin-bottom: 8px;
+    }
+    #controls {
+      margin-bottom: 16px;
+    }
+    #field-container {
+      background: #228B22;
+      border: 4px solid #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+      margin-bottom: 32px;
+    }
+    #football-field {
+      display: block;
+      background: repeating-linear-gradient(
+        to right,
+        #228B22 0px,
+        #228B22 40px,
+        #1a3d1a 40px,
+        #1a3d1a 80px
+      );
+    }
+    label, select, button {
+      font-size: 1rem;
+      margin-right: 8px;
+      color: #222;
+    }
+    select, button {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: none;
+    }
+    button {
+      background: #ffcc00;
+      color: #222;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #ffd700;
+    }
+  </style>
+</head>
+<body>
+  <h1>Football Passing Plays Visualizer</h1>
+  <div id="controls">
+    <label for="play-select">Choose a Passing Play:</label>
+    <select id="play-select">
+      <option value="slant">Slant</option>
+      <option value="out">Out</option>
+      <option value="post">Post</option>
+      <option value="corner">Corner</option>
+      <option value="go">Go/Fly</option>
+      <option value="curl">Curl</option>
+    </select>
+    <button id="animate-btn">Animate Play</button>
+  </div>
+  <div id="field-container">
+    <canvas id="football-field" width="800" height="400"></canvas>
+  </div>
+  <script>
+    // Field and player setup
+    const canvas = document.getElementById('football-field');
+    const ctx = canvas.getContext('2d');
+    const fieldWidth = canvas.width;
+    const fieldHeight = canvas.height;
+    const LOS = fieldHeight - 60; // Line of scrimmage
+    const playerRadius = 10;
+    const colors = ['#FFD700', '#00BFFF', '#FF6347', '#ADFF2F', '#FF69B4'];
+
+    // Define some basic passing plays (5 receivers)
+    // Each play: array of 5 arrays of points (x, y) relative to LOS
+    const plays = {
+      slant: [
+        // WR1 (left wide)
+        [ [100, LOS], [160, LOS-40], [220, LOS-100] ],
+        // WR2 (left slot)
+        [ [200, LOS], [240, LOS-30], [270, LOS-70] ],
+        // WR3 (center/TE)
+        [ [400, LOS], [400, LOS-30], [420, LOS-60] ],
+        // WR4 (right slot)
+        [ [600, LOS], [560, LOS-30], [530, LOS-70] ],
+        // WR5 (right wide)
+        [ [700, LOS], [640, LOS-40], [580, LOS-100] ]
+      ],
+      out: [
+        [ [100, LOS], [100, LOS-60], [180, LOS-60] ],
+        [ [200, LOS], [200, LOS-40], [260, LOS-40] ],
+        [ [400, LOS], [400, LOS-30], [400, LOS-80] ],
+        [ [600, LOS], [600, LOS-40], [540, LOS-40] ],
+        [ [700, LOS], [700, LOS-60], [620, LOS-60] ]
+      ],
+      post: [
+        [ [100, LOS], [160, LOS-40], [250, LOS-120] ],
+        [ [200, LOS], [240, LOS-30], [320, LOS-100] ],
+        [ [400, LOS], [400, LOS-30], [420, LOS-120] ],
+        [ [600, LOS], [560, LOS-30], [480, LOS-100] ],
+        [ [700, LOS], [640, LOS-40], [550, LOS-120] ]
+      ],
+      corner: [
+        [ [100, LOS], [160, LOS-40], [60, LOS-120] ],
+        [ [200, LOS], [240, LOS-30], [170, LOS-100] ],
+        [ [400, LOS], [400, LOS-30], [380, LOS-120] ],
+        [ [600, LOS], [560, LOS-30], [630, LOS-100] ],
+        [ [700, LOS], [640, LOS-40], [740, LOS-120] ]
+      ],
+      go: [
+        [ [100, LOS], [100, LOS-200] ],
+        [ [200, LOS], [200, LOS-200] ],
+        [ [400, LOS], [400, LOS-200] ],
+        [ [600, LOS], [600, LOS-200] ],
+        [ [700, LOS], [700, LOS-200] ]
+      ],
+      curl: [
+        [ [100, LOS], [100, LOS-120], [120, LOS-100] ],
+        [ [200, LOS], [200, LOS-100], [220, LOS-80] ],
+        [ [400, LOS], [400, LOS-80], [420, LOS-100] ],
+        [ [600, LOS], [600, LOS-100], [580, LOS-80] ],
+        [ [700, LOS], [700, LOS-120], [680, LOS-100] ]
+      ]
+    };
+
+    // Draw the football field
+    function drawField() {
+      ctx.clearRect(0, 0, fieldWidth, fieldHeight);
+      // Field background
+      ctx.fillStyle = '#228B22';
+      ctx.fillRect(0, 0, fieldWidth, fieldHeight);
+      // Yard lines every 40px (10 yards)
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      for (let y = fieldHeight - 60; y >= 40; y -= 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(fieldWidth, y);
+        ctx.stroke();
+        // Label yard lines
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(((fieldHeight-y)/4+10) + '', 5, y-5);
+      }
+      // End zones
+      ctx.fillStyle = '#003366';
+      ctx.fillRect(0, 0, fieldWidth, 40);
+      ctx.fillRect(0, fieldHeight-40, fieldWidth, 40);
+      ctx.font = 'bold 20px Arial';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('END ZONE', fieldWidth/2-60, 30);
+      ctx.fillText('END ZONE', fieldWidth/2-60, fieldHeight-10);
+      // Line of scrimmage
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, LOS);
+      ctx.lineTo(fieldWidth, LOS);
+      ctx.stroke();
+    }
+
+    // Draw receivers at start
+    function drawReceivers() {
+      const play = plays[document.getElementById('play-select').value];
+      play.forEach((route, i) => {
+        const [start] = route;
+        ctx.beginPath();
+        ctx.arc(start[0], start[1], playerRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fill();
+        ctx.strokeStyle = '#222';
+        ctx.stroke();
+      });
+    }
+
+    // Animate the selected play
+    function animatePlay() {
+      const play = plays[document.getElementById('play-select').value];
+      const steps = 60; // Animation steps
+      let t = 0;
+      const positions = play.map(route => route[0].slice());
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      function animateStep() {
+        drawField();
+        // Draw routes
+        play.forEach((route, i) => {
+          ctx.beginPath();
+          ctx.moveTo(route[0][0], route[0][1]);
+          for (let j = 1; j < route.length; j++) {
+            ctx.lineTo(route[j][0], route[j][1]);
+          }
+          ctx.strokeStyle = colors[i % colors.length];
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        });
+        // Animate receivers
+        play.forEach((route, i) => {
+          let seg = 0;
+          let segT = t / steps;
+          while (seg < route.length-2 && segT > (seg+1)/(route.length-1)) seg++;
+          let localT = (segT - seg/(route.length-1)) * (route.length-1);
+          let x = lerp(route[seg][0], route[seg+1][0], localT);
+          let y = lerp(route[seg][1], route[seg+1][1], localT);
+          positions[i] = [x, y];
+          ctx.beginPath();
+          ctx.arc(x, y, playerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = colors[i % colors.length];
+          ctx.fill();
+          ctx.strokeStyle = '#222';
+          ctx.stroke();
+        });
+        if (t < steps) {
+          t++;
+          requestAnimationFrame(animateStep);
+        } else {
+          throwBallToReceiver(positions);
+        }
+      }
+      animateStep();
+    }
+
+    // Ball animation: QB at center (400, LOS+30), throw to one receiver
+    function throwBallToReceiver(receiverPositions) {
+      const qbX = 400;
+      const qbY = LOS + 30;
+      // Pick a random receiver
+      const idx = Math.floor(Math.random() * receiverPositions.length);
+      const target = receiverPositions[idx];
+      const ballSteps = 30;
+      let t = 0;
+      function animateBall() {
+        drawField();
+        // Draw routes
+        const play = plays[document.getElementById('play-select').value];
+        play.forEach((route, i) => {
+          ctx.beginPath();
+          ctx.moveTo(route[0][0], route[0][1]);
+          for (let j = 1; j < route.length; j++) {
+            ctx.lineTo(route[j][0], route[j][1]);
+          }
+          ctx.strokeStyle = colors[i % colors.length];
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        });
+        // Draw receivers at their final positions
+        receiverPositions.forEach((pos, i) => {
+          ctx.beginPath();
+          ctx.arc(pos[0], pos[1], playerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = colors[i % colors.length];
+          ctx.fill();
+          ctx.strokeStyle = '#222';
+          ctx.stroke();
+        });
+        // Animate ball
+        let bx = qbX + (target[0] - qbX) * (t / ballSteps);
+        let by = qbY + (target[1] - qbY) * (t / ballSteps);
+        ctx.beginPath();
+        ctx.arc(bx, by, 7, 0, 2 * Math.PI);
+        ctx.fillStyle = '#8B4513';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Draw QB
+        ctx.beginPath();
+        ctx.arc(qbX, qbY, playerRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = '#222';
+        ctx.stroke();
+        if (t < ballSteps) {
+          t++;
+          requestAnimationFrame(animateBall);
+        } else {
+          // Draw final state
+          drawField();
+          // Draw routes
+          play.forEach((route, i) => {
+            ctx.beginPath();
+            ctx.moveTo(route[0][0], route[0][1]);
+            for (let j = 1; j < route.length; j++) {
+              ctx.lineTo(route[j][0], route[j][1]);
+            }
+            ctx.strokeStyle = colors[i % colors.length];
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          });
+          receiverPositions.forEach((pos, i) => {
+            ctx.beginPath();
+            ctx.arc(pos[0], pos[1], playerRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = '#222';
+            ctx.stroke();
+          });
+          // Draw ball at receiver
+          ctx.beginPath();
+          ctx.arc(target[0], target[1], 7, 0, 2 * Math.PI);
+          ctx.fillStyle = '#8B4513';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          // Draw QB
+          ctx.beginPath();
+          ctx.arc(qbX, qbY, playerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+          ctx.strokeStyle = '#222';
+          ctx.stroke();
+        }
+      }
+      animateBall();
+    }
+
+    // Initial draw
+    drawField();
+    drawReceivers();
+
+    // Event listeners
+    document.getElementById('animate-btn').onclick = animatePlay;
+    document.getElementById('play-select').onchange = function() {
+      drawField();
+      drawReceivers();
+    };
+  </script>
+</body>
+</html>
